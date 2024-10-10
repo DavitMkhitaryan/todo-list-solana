@@ -19,7 +19,7 @@ describe("todo-list-app", () => {
       })
       .signers([task])
       .rpc();
-    console.log("Your transaction signature", tx);
+    console.log("Your transaction signature test", tx);
 
     const taskAccount = await program.account.task.fetch(task.publicKey);
     console.log("Your task", taskAccount);
