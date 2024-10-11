@@ -7,10 +7,11 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 env:
-  RUST_TOOLCHAIN: 1.79.0
-  SOLANA_CLI_VERSION: 1.18.22
+  RUST_TOOLCHAIN: 1.75.0
+  SOLANA_CLI_VERSION: 1.18.11
   ANCHOR_CLI_VERSION: 0.30.1
 
 jobs:
@@ -32,7 +33,7 @@ jobs:
           components: rustfmt, clippy
           override: true
 
-      # 3. Cache Rust dependencies
+      # 3. Cache Cargo registry and build
       - name: Cache Cargo registry
         uses: actions/cache@v3
         with:
@@ -54,19 +55,34 @@ jobs:
         run: |
           sh -c "$(curl -sSfL https://release.solana.com/v${{ env.SOLANA_CLI_VERSION }}/install)"
           echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
-      # Verify Solana installation
       - name: Verify Solana Installation
         run: solana --version
 
-      # 5. Install Anchor CLI
+      # 5. Cache Anchor CLI installation
+      - name: Cache Anchor CLI
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/bin/anchor
+          key: ${{ runner.os }}-anchor-cli-${{ env.ANCHOR_CLI_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-anchor-cli-
+
+      # 6. Install Anchor CLI using Cargo if not cached
       - name: Install Anchor
         run: |
-          npm install -g @project-serum/anchor-cli@${{ env.ANCHOR_CLI_VERSION }}
-      # Verify Anchor installation
+          if [ ! -f ~/.cargo/bin/anchor ]; then
+            cargo install --git https://github.com/coral-xyz/anchor --tag v${{ env.ANCHOR_CLI_VERSION }} anchor-cli;
+          fi
       - name: Verify Anchor Installation
         run: anchor --version
 
-      # 6. Install Node.js dependencies (using cache)
+      # 5. Use a keypair from GitHub Secrets
+      - name: Setup Keypair from Secret
+        run: |
+          echo "${{ secrets.SOLANA_KEYPAIR }}" > /home/runner/.config/solana/id.json
+          solana config set --keypair /home/runner/.config/solana/id.json
+
+      # 7. Install Node.js dependencies (using cache)
       - name: Cache Node.js modules
         uses: actions/cache@v3
         with:
@@ -78,11 +94,7 @@ jobs:
       - name: Install Node.js dependencies
         run: yarn install
 
-      # 7. Build Anchor program
-      - name: Build Anchor Program
-        run: anchor build
-
-      # 8. Run Anchor Tests
+      # 8. Run Anchor Tests (skip build step since we built earlier)
       - name: Run Anchor Tests
         run: anchor test
         timeout-minutes: 15
